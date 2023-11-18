@@ -3,7 +3,7 @@ use sqlx::any::AnyTypeInfo;
 use sqlx::decode::Decode;
 use sqlx::postgres::any::{AnyTypeInfoKind, AnyValueKind};
 use sqlx::{any::AnyPoolOptions, database::HasValueRef, error::BoxDynError, Any, AnyPool};
-use sqlx::{Type, ValueRef};
+use sqlx::{Type, ValueRef, Connection};
 
 #[derive(Debug)]
 struct JsonValue(serde_json::Value);
@@ -13,8 +13,8 @@ struct Task {
     id: i64,
     payload: JsonValue,
     attempts: i16,
-    available_at: i64,
-    created_at: i64,
+    // available_at: i64,
+    // created_at: i64,
 }
 
 impl Type<Any> for JsonValue {
@@ -48,9 +48,9 @@ impl Worker {
         WorkerBuilder::new()
     }
     pub async fn run(&self) -> Result<(), Error> {
-        let mut conn = self.pool.clone().acquire().await?;
+        let mut pool = self.pool.acquire().await?;
+        let mut conn = pool.begin().await?;
 
-        // FOR UPDATE SKIP LOCKED
         let task = sqlx::query_as::<_, Task>(
             r#"
             SELECT
@@ -77,7 +77,9 @@ impl Worker {
             Some(task) => task,
             None => {
                 return {
-                    conn.close().await?;
+                    drop(conn);
+                    // conn.commit().await?;
+                    pool.close().await?;
                     Ok(())
                 }
             }
@@ -143,7 +145,8 @@ impl Worker {
             }
         }
 
-        conn.close().await?;
+        conn.commit().await?;
+        pool.close().await?;
 
         Ok(())
     }

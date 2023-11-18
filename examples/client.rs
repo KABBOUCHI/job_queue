@@ -20,7 +20,7 @@ async fn main() -> Result<(), Error> {
         .connect("mysql://root:@localhost/job_queue")
         .await?;
 
-    // loop {
+    loop {
         println!("Dispatching job...");
         queue
             .dispatch(HelloJob {
@@ -28,8 +28,8 @@ async fn main() -> Result<(), Error> {
             })
             .await?;
 
-        // tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-    // }
+        tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+    }
 
-    Ok(())
+    // Ok(())
 }

@@ -1,5 +1,5 @@
-use std::time::Duration;
 use job_queue::{Error, Job, Worker};
+use std::time::Duration;
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct HelloJob {
@@ -30,12 +30,12 @@ async fn main() -> Result<(), Error> {
         tokio::spawn(async move {
             loop {
                 worker.run().await.unwrap();
-                tokio::time::sleep(Duration::from_millis(10)).await;
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
         });
     }
 
     loop {
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
