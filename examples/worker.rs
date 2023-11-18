@@ -1,6 +1,5 @@
 use std::time::Duration;
-
-use job_queue::{create_worker, Error, Job, WorkerOptions};
+use job_queue::{Error, Job, Worker};
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct HelloJob {
@@ -20,13 +19,10 @@ impl Job for HelloJob {
 async fn main() -> Result<(), Error> {
     let worker_count = 10;
 
-    let worker = create_worker(
-        "mysql://root:@localhost/job_queue",
-        WorkerOptions {
-            max_connection: worker_count * 2,
-        },
-    )
-    .await?;
+    let worker = Worker::builder()
+        .max_connections(worker_count * 2)
+        .connect("mysql://root:@localhost/job_queue")
+        .await?;
 
     for _ in 0..worker_count {
         let worker = worker.clone();
@@ -40,6 +36,6 @@ async fn main() -> Result<(), Error> {
     }
 
     loop {
-        tokio::time::sleep(Duration::from_millis(10)).await; 
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
 }

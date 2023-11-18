@@ -1,7 +1,9 @@
+mod client;
+mod errors;
 mod job;
 mod worker;
-mod errors;
 
-pub use job::{create_queue, Job, JobQueue};
-pub use worker::{create_worker, Worker, WorkerOptions};
+pub use client::{Client, ClientBuilder};
 pub use errors::Error;
+pub use job::Job;
+pub use worker::{Worker, WorkerBuilder};

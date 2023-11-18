@@ -1,4 +1,4 @@
-use job_queue::{create_queue, Error, Job};
+use job_queue::{Client, Error, Job};
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct HelloJob {
@@ -16,16 +16,20 @@ impl Job for HelloJob {
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    let queue = create_queue("mysql://root:@localhost/job_queue").await?;
-
-    loop {
-        println!("Dispatching job...");
-        queue
-        .dispatch(HelloJob {
-            message: "Hello, world!".to_string(),
-        })
+    let queue = Client::builder()
+        .connect("mysql://root:@localhost/job_queue")
         .await?;
 
-        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-    }
+    // loop {
+        println!("Dispatching job...");
+        queue
+            .dispatch(HelloJob {
+                message: "Hello, world!".to_string(),
+            })
+            .await?;
+
+        // tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    // }
+
+    Ok(())
 }
