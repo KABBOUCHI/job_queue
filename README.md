@@ -62,5 +62,4 @@ loop {
 ```
 
 TODO:
-- [ ] save failed jobs
 - [ ] emit events, failing, stopping, before and after processing a job

@@ -14,6 +14,7 @@ struct JsonValue(serde_json::Value);
 #[derive(Debug, sqlx::FromRow)]
 struct Task {
     id: i64,
+    uuid: String,
     payload: JsonValue,
     attempts: i16,
     // available_at: i64,
@@ -66,10 +67,11 @@ impl Worker {
             .map_err(|_| Error::Unknown)?
             .as_secs() as i64;
 
-        let task = sqlx::query_as::<_, Task>(&format!(
+        let task = sqlx::query_as::<Any, Task>(&format!(
             r#"
             SELECT
                 id,
+                uuid,
                 payload,
                 attempts
             FROM
@@ -169,6 +171,7 @@ impl Worker {
                 info!("Job {}#{} finished", job.typetag_name(), task.id);
             }
             Ok(Err(err)) | Err(err) => {
+                let error_message = err.to_string();
                 let _ = job.failed(err).await;
 
                 let tries = job.tries();
@@ -191,8 +194,8 @@ impl Worker {
 
                     sqlx::query(&format!(
                         r#"
-                        INSERT INTO jobs (queue, payload, attempts, available_at, created_at)
-                        VALUES ({},{},{},{},{})
+                        INSERT INTO jobs (uuid, queue, payload, attempts, available_at, created_at)
+                        VALUES ({}, {},{},{},{},{})
                         "#,
                         if self.db_type == DBType::Mysql {
                             "?"
@@ -219,16 +222,55 @@ impl Worker {
                         } else {
                             "$5"
                         },
+                        if self.db_type == DBType::Mysql {
+                            "?"
+                        } else {
+                            "$6"
+                        },
                     ))
+                    .bind(&task.uuid)
                     .bind(&self.queue)
                     .bind(serde_json::to_string(&job).map_err(Error::SerdeError)?)
                     .bind(attempts + 1)
                     .bind(time as i64 + backoff)
-                    .bind(time as i64)
                     .execute(&mut *conn)
                     .await
                     .map_err(Error::DatabaseError)?;
                 } else {
+                    sqlx::query(&format!(
+                        r#"
+                        INSERT INTO failed_jobs (uuid, queue, payload, exception)
+                        VALUES ({},{},{},{})
+                        "#,
+                        if self.db_type == DBType::Mysql {
+                            "?"
+                        } else {
+                            "$1"
+                        },
+                        if self.db_type == DBType::Mysql {
+                            "?"
+                        } else {
+                            "$2"
+                        },
+                        if self.db_type == DBType::Mysql {
+                            "?"
+                        } else {
+                            "$3"
+                        },
+                        if self.db_type == DBType::Mysql {
+                            "?"
+                        } else {
+                            "$4"
+                        },
+                    ))
+                    .bind(&task.uuid)
+                    .bind(&self.queue)
+                    .bind(serde_json::to_string(&job).map_err(Error::SerdeError)?)
+                    .bind(error_message)
+                    .execute(&mut *conn)
+                    .await
+                    .map_err(Error::DatabaseError)?;
+
                     error!("Job {}#{} failed", job.typetag_name(), task.id);
                 }
             }

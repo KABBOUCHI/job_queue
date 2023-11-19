@@ -559,7 +559,7 @@ checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 
 [[package]]
 name = "job_queue"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "async-trait",
  "env_logger",
@@ -570,6 +570,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "typetag",
+ "uuid",
 ]
 
 [[package]]
@@ -1546,6 +1547,15 @@ dependencies = [
  "form_urlencoded",
  "idna",
  "percent-encoding",
+]
+
+[[package]]
+name = "uuid"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88ad59a7560b41a70d191093a945f0b87bc1deeda46fb237479708a1d6b6cdfc"
+dependencies = [
+ "getrandom",
 ]
 
 [[package]]

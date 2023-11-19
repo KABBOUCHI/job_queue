@@ -1,5 +1,6 @@
 use crate::{get_pool, DBType, Error, Job};
 use sqlx::AnyPool;
+use uuid::Uuid;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Default)]
@@ -46,13 +47,16 @@ impl Client {
             .map_err(|_| Error::Unknown)?
             .as_secs();
 
+        let job_id = Uuid::new_v4().to_string();
+
         sqlx::query(&format!(
-            "INSERT INTO jobs (queue, payload, attempts, available_at, created_at) VALUES {}",
+            "INSERT INTO jobs (uuid, queue, payload, attempts, available_at, created_at) VALUES {}",
             match self.db_type {
-                DBType::Mysql => "(?, ?, ?, ?, ?)",
-                DBType::Postgres => "($1, $2, $3, $4, $5)",
+                DBType::Mysql => "(?, ?, ?, ?, ?, ?)",
+                DBType::Postgres => "($1, $2, $3, $4, $5, $6)",
             }
         ))
+        .bind(job_id)
         .bind(options.queue.unwrap_or_else(|| job.queue()))
         .bind(payload)
         .bind(0)

@@ -23,7 +23,7 @@ async fn main() -> Result<(), Error> {
     let worker = Worker::builder()
         .max_connections(worker_count * 2)
         .worker_count(worker_count)
-        .connect("postgres://kabbouchi:@localhost/job_queue")
+        .connect("mysql://root:@localhost/job_queue")
         .await?;
 
     worker.start().await?;
