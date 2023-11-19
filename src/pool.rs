@@ -71,8 +71,8 @@ pub(crate) async fn get_pool(
             r#"
                 CREATE TABLE IF NOT EXISTS public.jobs (
                     id int8 NOT NULL DEFAULT nextval('jobs_id_seq'::regclass),
-                    uuid char(36) NOT NULL,
-                    queue char(36) NOT NULL,
+                    uuid text NOT NULL,
+                    queue text NOT NULL,
                     payload text NOT NULL,
                     attempts int2 NOT NULL,
                     reserved_at int4,
@@ -95,8 +95,8 @@ pub(crate) async fn get_pool(
             r#"
                 CREATE TABLE IF NOT EXISTS public.failed_jobs (
                     "id" int8 NOT NULL DEFAULT nextval('failed_jobs_id_seq'::regclass),
-                    "uuid" char(36) NOT NULL,
-                    "queue" char(36) NOT NULL,
+                    "uuid" text NOT NULL,
+                    "queue" text NOT NULL,
                     "payload" text NOT NULL,
                     "exception" text NOT NULL,
                     "failed_at" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -18,7 +18,7 @@ impl Job for HelloJob {
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let queue = Client::builder()
-        .connect("mysql://root:@localhost/job_queue")
+        .connect("postgres://kabbouchi:@localhost/job_queue")
         .await?;
 
     loop {
