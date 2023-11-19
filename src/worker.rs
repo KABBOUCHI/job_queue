@@ -1,6 +1,6 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::{Error, Job};
+use crate::{DBType, Error, Job};
 use log::{error, info};
 use sqlx::any::AnyTypeInfo;
 use sqlx::decode::Decode;
@@ -26,6 +26,10 @@ impl Type<Any> for JsonValue {
             kind: AnyTypeInfoKind::Blob,
         }
     }
+
+    fn compatible(ty: &AnyTypeInfo) -> bool {
+        matches!(ty.kind, AnyTypeInfoKind::Blob | AnyTypeInfoKind::Text)
+    }
 }
 
 impl<'r> Decode<'r, Any> for JsonValue {
@@ -34,6 +38,7 @@ impl<'r> Decode<'r, Any> for JsonValue {
 
         match v.kind {
             AnyValueKind::Blob(s) => Ok(JsonValue(serde_json::from_slice(&s)?)),
+            AnyValueKind::Text(s) => Ok(JsonValue(serde_json::from_str(&s)?)),
             _ => Err("invalid type".into()),
         }
     }
@@ -41,6 +46,7 @@ impl<'r> Decode<'r, Any> for JsonValue {
 
 #[derive(Debug, Clone)]
 pub struct Worker {
+    db_type: DBType,
     pool: AnyPool,
     queue: String,
     retry_after: i64,
@@ -55,25 +61,47 @@ impl Worker {
     async fn run(&self) -> Result<(), Error> {
         let mut pool = self.pool.acquire().await?;
         let mut conn = pool.begin().await?;
+        let unix_timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| Error::Unknown)?
+            .as_secs() as i64;
 
-        let task = sqlx::query_as::<_, Task>(
+        let task = sqlx::query_as::<_, Task>(&format!(
             r#"
             SELECT
-                *
+                id,
+                payload,
+                attempts
             FROM
                 jobs
             WHERE
-                queue = ?
+                queue = {}
                 AND ((reserved_at IS NULL
-                    AND available_at <= UNIX_TIMESTAMP())
-                    OR (reserved_at <= UNIX_TIMESTAMP() - ?))
+                    AND available_at <= {})
+                    OR (reserved_at <= {}))
             ORDER BY
                 id ASC
             LIMIT 1
             FOR UPDATE SKIP LOCKED"#,
-        )
+            if self.db_type == DBType::Mysql {
+                "?"
+            } else {
+                "$1"
+            },
+            if self.db_type == DBType::Mysql {
+                "?"
+            } else {
+                "$2"
+            },
+            if self.db_type == DBType::Mysql {
+                "?"
+            } else {
+                "$3"
+            },
+        ))
         .bind(&self.queue)
-        .bind(self.retry_after)
+        .bind(unix_timestamp)
+        .bind(unix_timestamp - self.retry_after)
         .fetch_optional(&mut *conn)
         .await
         .map_err(Error::DatabaseError)?;
@@ -90,13 +118,24 @@ impl Worker {
             }
         };
 
-        sqlx::query(
+        sqlx::query(&format!(
             r#"
             UPDATE jobs
-            SET reserved_at = UNIX_TIMESTAMP(),  attempts = ?
-            WHERE id = ?
+            SET reserved_at = {},  attempts = {}
+            WHERE id = {}
             "#,
-        )
+            unix_timestamp,
+            if self.db_type == DBType::Mysql {
+                "?"
+            } else {
+                "$1"
+            },
+            if self.db_type == DBType::Mysql {
+                "?"
+            } else {
+                "$2"
+            },
+        ))
         .bind(task.attempts + 1)
         .bind(task.id)
         .execute(&mut *conn)
@@ -110,12 +149,14 @@ impl Worker {
 
         let result = job.handle().await;
 
-        sqlx::query(
-            r#"
-            DELETE FROM jobs
-            WHERE id = ?
-            "#,
-        )
+        sqlx::query(&format!(
+            "DELETE FROM jobs WHERE id = {}",
+            if self.db_type == DBType::Mysql {
+                "?"
+            } else {
+                "$1"
+            }
+        ))
         .bind(task.id)
         .execute(&mut *conn)
         .await
@@ -144,12 +185,37 @@ impl Worker {
                         backoff
                     );
 
-                    sqlx::query(
+                    sqlx::query(&format!(
                         r#"
                         INSERT INTO jobs (queue, payload, attempts, available_at, created_at)
-                        VALUES (?,?,?,?,?)
+                        VALUES ({},{},{},{},{})
                         "#,
-                    )
+                        if self.db_type == DBType::Mysql {
+                            "?"
+                        } else {
+                            "$1"
+                        },
+                        if self.db_type == DBType::Mysql {
+                            "?"
+                        } else {
+                            "$2"
+                        },
+                        if self.db_type == DBType::Mysql {
+                            "?"
+                        } else {
+                            "$3"
+                        },
+                        if self.db_type == DBType::Mysql {
+                            "?"
+                        } else {
+                            "$4"
+                        },
+                        if self.db_type == DBType::Mysql {
+                            "?"
+                        } else {
+                            "$5"
+                        },
+                    ))
                     .bind(&self.queue)
                     .bind(serde_json::to_string(&job).map_err(Error::SerdeError)?)
                     .bind(attempts + 1)
@@ -234,16 +300,63 @@ impl WorkerBuilder {
             .await
             .map_err(Error::DatabaseError)?;
 
-        let mut conn = pool.acquire().await?;
+        let db_type = if database_url.starts_with("mysql") {
+            DBType::Mysql
+        } else if database_url.starts_with("postgres") {
+            DBType::Postgres
+        } else {
+            return Err(Error::UnsupportedDatabaseUrl);
+        };
 
-        sqlx::query(include_str!("./migrations/mysql.sql"))
-            .execute(&mut *conn)
+        if database_url.starts_with("mysql") {
+            sqlx::query(
+                    r" CREATE TABLE IF NOT EXISTS `jobs` (
+                    `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+                    `queue` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+                    `payload` longtext COLLATE utf8mb4_unicode_ci NOT NULL,
+                    `attempts` int unsigned NOT NULL,
+                    `reserved_at` int unsigned DEFAULT NULL,
+                    `available_at` int unsigned NOT NULL,
+                    `created_at` int unsigned NOT NULL,
+                    PRIMARY KEY (`id`),
+                    KEY `jobs_queue_index` (`queue`)
+                  ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+                )
+                .execute(&pool)
+                .await
+                .map_err(Error::DatabaseError)?;
+        } else if database_url.starts_with("postgres") {
+            let mut transaction = pool.begin().await?;
+
+            sqlx::query("CREATE SEQUENCE IF NOT EXISTS jobs_id_seq")
+                .execute(&mut *transaction)
+                .await
+                .map_err(Error::DatabaseError)?;
+            sqlx::query(
+                r#"
+                    CREATE TABLE IF NOT EXISTS public.jobs (
+                        id int8 NOT NULL DEFAULT nextval('jobs_id_seq'::regclass),
+                        queue varchar NOT NULL,
+                        payload text NOT NULL,
+                        attempts int2 NOT NULL,
+                        reserved_at int4,
+                        available_at int4 NOT NULL,
+                        created_at int4 NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    "#,
+            )
+            .execute(&mut *transaction)
             .await
             .map_err(Error::DatabaseError)?;
 
-        conn.close().await?;
+            transaction.commit().await.map_err(Error::DatabaseError)?;
+        } else {
+            return Err(Error::UnsupportedDatabaseUrl);
+        }
 
         let worker = Worker {
+            db_type,
             pool,
             queue: self.queue,
             retry_after: self.retry_after,

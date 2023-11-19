@@ -35,7 +35,7 @@ impl Job for HelloJob {
 use job_queue::{Error, Job, Queue};
 
 let queue = Client::builder()
-    .connect("mysql://root:@localhost/job_queue")
+    .connect("mysql://root:@localhost/job_queue") // or postgres://root:@localhost/job_queue
     .await?;
 
 queue
@@ -51,7 +51,7 @@ queue
 let worker = Worker::builder()
         .max_connections(10)
         .worker_count(10)
-        .connect("mysql://root:@localhost/job_queue")
+        .connect("mysql://root:@localhost/job_queue") // or postgres://root:@localhost/job_queue
         .await?;
 
 worker.start().await?;
