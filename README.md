@@ -49,11 +49,14 @@ queue
 
 ```rust
 let worker = Worker::builder()
+        .max_connections(10)
+        .worker_count(10)
         .connect("mysql://root:@localhost/job_queue")
         .await?;
 
+worker.start().await?;
+
 loop {
-    worker.run().await.unwrap();
     tokio::time::sleep(Duration::from_millis(100)).await;
 }
 ```

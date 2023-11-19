@@ -1,5 +1,6 @@
-use job_queue::{Error, Job, Worker};
 use std::time::Duration;
+
+use job_queue::{Error, Job, Worker};
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct HelloJob {
@@ -10,30 +11,23 @@ pub struct HelloJob {
 #[typetag::serde]
 impl Job for HelloJob {
     async fn handle(&self) -> Result<(), Error> {
-        println!("{}", self.message);
         Ok(())
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+    env_logger::init();
+
     let worker_count = 10;
 
     let worker = Worker::builder()
         .max_connections(worker_count * 2)
+        .worker_count(worker_count)
         .connect("mysql://root:@localhost/job_queue")
         .await?;
 
-    for _ in 0..worker_count {
-        let worker = worker.clone();
-
-        tokio::spawn(async move {
-            loop {
-                worker.run().await.unwrap();
-                tokio::time::sleep(Duration::from_millis(100)).await;
-            }
-        });
-    }
+    worker.start().await?;
 
     loop {
         tokio::time::sleep(Duration::from_millis(100)).await;

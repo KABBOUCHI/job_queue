@@ -1,9 +1,12 @@
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
 use crate::{Error, Job};
+use log::{error, info};
 use sqlx::any::AnyTypeInfo;
 use sqlx::decode::Decode;
 use sqlx::postgres::any::{AnyTypeInfoKind, AnyValueKind};
 use sqlx::{any::AnyPoolOptions, database::HasValueRef, error::BoxDynError, Any, AnyPool};
-use sqlx::{Type, ValueRef, Connection};
+use sqlx::{Connection, Type, ValueRef};
 
 #[derive(Debug)]
 struct JsonValue(serde_json::Value);
@@ -41,13 +44,15 @@ pub struct Worker {
     pool: AnyPool,
     queue: String,
     retry_after: i64,
+    worker_count: u32,
 }
 
 impl Worker {
     pub fn builder() -> WorkerBuilder {
         WorkerBuilder::new()
     }
-    pub async fn run(&self) -> Result<(), Error> {
+
+    async fn run(&self) -> Result<(), Error> {
         let mut pool = self.pool.acquire().await?;
         let mut conn = pool.begin().await?;
 
@@ -81,7 +86,7 @@ impl Worker {
                     // conn.commit().await?;
                     pool.close().await?;
                     Ok(())
-                }
+                };
             }
         };
 
@@ -101,6 +106,8 @@ impl Worker {
         let job: Box<dyn Job> =
             serde_json::from_value(task.payload.0).map_err(Error::SerdeError)?;
 
+        info!("Job {}#{} started", job.typetag_name(), task.id);
+
         let result = job.handle().await;
 
         sqlx::query(
@@ -116,37 +123,67 @@ impl Worker {
 
         match result {
             Ok(_) => {
-                println!("Job {} completed", task.id)
+                info!("Job {}#{} finished", job.typetag_name(), task.id);
             }
             Err(_e) => {
-                // let tries = job.max_retries();
-                // let attempts = task.attempts;
+                let tries = job.max_retries();
+                let attempts = task.attempts;
 
-                // if (attempts + 1) < tries {
-                //     sqlx::query(
-                //         r#"
-                //         INSERT INTO jobs (queue, payload, attempts, available_at, created_at)
-                //         VALUES (?,?,?,?,?)
-                //         "#,
-                //     )
-                //     .bind(&self.queue)
-                //     .bind(serde_json::to_string(&job).map_err(Error::SerdeError)?)
-                //     .bind(attempts + 1)
-                //     .bind(task.available_at + 60)
-                //     .bind(task.created_at)
-                //     .execute(&mut *conn)
-                //     .await
-                //     .map_err(Error::DatabaseError)?;
-                // } else {
-                //     println!("Job {} failed", task.id)
-                // }
+                if (attempts + 1) < tries {
+                    let time = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .map_err(|_| Error::Unknown)?
+                        .as_secs();
 
-                println!("Job {} failed", task.id)
+                    let backoff = job.backoff((attempts + 1) as u32) as i64;
+
+                    error!(
+                        "Job {}#{} failed, will be retried in {} seconds",
+                        job.typetag_name(),
+                        task.id,
+                        backoff
+                    );
+
+                    sqlx::query(
+                        r#"
+                        INSERT INTO jobs (queue, payload, attempts, available_at, created_at)
+                        VALUES (?,?,?,?,?)
+                        "#,
+                    )
+                    .bind(&self.queue)
+                    .bind(serde_json::to_string(&job).map_err(Error::SerdeError)?)
+                    .bind(attempts + 1)
+                    .bind(time as i64 + backoff)
+                    .bind(time as i64)
+                    .execute(&mut *conn)
+                    .await
+                    .map_err(Error::DatabaseError)?;
+                } else {
+                    error!("Job {}#{} failed", job.typetag_name(), task.id);
+                }
             }
         }
 
         conn.commit().await?;
         pool.close().await?;
+
+        Ok(())
+    }
+
+    pub async fn start(&self) -> Result<(), Error> {
+        info!("Processing jobs from the [{}] queue.", self.queue);
+
+        for _ in 0..self.worker_count {
+            let worker = self.clone();
+
+            tokio::spawn(async move {
+                loop {
+                    worker.run().await.unwrap();
+
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+            });
+        }
 
         Ok(())
     }
@@ -156,6 +193,7 @@ impl Worker {
 pub struct WorkerBuilder {
     pub max_connections: u32,
     pub min_connections: u32,
+    pub worker_count: u32,
     pub retry_after: i64,
     pub queue: String,
 }
@@ -167,6 +205,7 @@ impl WorkerBuilder {
             max_connections: 10,
             min_connections: 0,
             retry_after: 300,
+            worker_count: 1,
         }
     }
 
@@ -177,6 +216,11 @@ impl WorkerBuilder {
 
     pub fn min_connections(mut self, min_connections: u32) -> Self {
         self.min_connections = min_connections;
+        self
+    }
+
+    pub fn worker_count(mut self, worker_count: u32) -> Self {
+        self.worker_count = worker_count;
         self
     }
 
@@ -203,6 +247,7 @@ impl WorkerBuilder {
             pool,
             queue: self.queue,
             retry_after: self.retry_after,
+            worker_count: self.worker_count,
         };
 
         Ok(worker)
