@@ -1,6 +1,6 @@
 [package]
 name = "job_queue"
-version = "0.0.5"
+version = "0.0.6"
 edition = "2021"
 authors = ["Georges KABBOUCHI <georges.kabbouchi@gmail.com>"]
 description = "A simple, efficient Rust library for handling asynchronous job processing and task queuing."

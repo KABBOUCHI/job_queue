@@ -1,6 +1,5 @@
-use std::time::Duration;
-
 use job_queue::{Error, Job, Worker};
+use std::time::Duration;
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct HelloJob {
@@ -11,15 +10,13 @@ pub struct HelloJob {
 #[typetag::serde]
 impl Job for HelloJob {
     async fn handle(&self) -> Result<(), Error> {
-        tokio::time::sleep(Duration::from_secs(10)).await;
-
         Ok(())
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    env_logger::init();
+    env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
 
     let worker_count = 10;
 

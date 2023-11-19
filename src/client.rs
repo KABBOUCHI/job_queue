@@ -1,7 +1,13 @@
 use crate::{DBType, Error, Job};
 use sqlx::any::AnyPoolOptions;
 use sqlx::AnyPool;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+#[derive(Debug, Clone, Default)]
+pub struct DispatchOptions {
+    pub queue: Option<String>,
+    pub delay: Option<Duration>,
+}
 
 #[derive(Debug)]
 pub struct Client {
@@ -16,11 +22,24 @@ impl Client {
 
     pub async fn dispatch(&self, job: impl Job) -> Result<(), Error> {
         let queue = job.queue();
-        
+
         self.dispatch_on_queue(job, &queue).await
     }
 
     pub async fn dispatch_on_queue(&self, job: impl Job, queue: &str) -> Result<(), Error> {
+        let options = DispatchOptions {
+            queue: Some(queue.to_string()),
+            ..Default::default()
+        };
+
+        self.custom_dispatch(job, options).await
+    }
+
+    pub async fn custom_dispatch(
+        &self,
+        job: impl Job,
+        options: DispatchOptions,
+    ) -> Result<(), Error> {
         let mut conn = self.pool.clone().acquire().await?;
         let payload = serde_json::to_string(&job as &dyn Job).map_err(Error::SerdeError)?;
         let time = SystemTime::now()
@@ -35,10 +54,16 @@ impl Client {
                 DBType::Postgres => "($1, $2, $3, $4, $5)",
             }
         ))
-        .bind(queue)
+        .bind(options.queue.unwrap_or_else(|| job.queue()))
         .bind(payload)
         .bind(0)
-        .bind(time as i64)
+        .bind(
+            (time
+                + options
+                    .delay
+                    .unwrap_or_else(|| Duration::from_secs(0))
+                    .as_secs()) as i64,
+        )
         .bind(time as i64)
         .execute(&mut *conn)
         .await

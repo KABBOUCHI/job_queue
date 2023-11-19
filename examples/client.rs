@@ -1,4 +1,5 @@
-use job_queue::{Client, Error, Job};
+use std::time::Duration;
+use job_queue::{Client, Error, Job, DispatchOptions};
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct HelloJob {
@@ -23,8 +24,11 @@ async fn main() -> Result<(), Error> {
     loop {
         println!("Dispatching job...");
         queue
-            .dispatch(HelloJob {
+            .custom_dispatch(HelloJob {
                 message: "Hello, world!".to_string(),
+            }, DispatchOptions {
+                queue: Some("default".to_string()),
+                delay: Some(Duration::from_secs(60)),
             })
             .await?;
 

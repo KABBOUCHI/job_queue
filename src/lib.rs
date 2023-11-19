@@ -9,7 +9,7 @@ pub enum DBType {
     Mysql,
 }
 
-pub use client::{Client, ClientBuilder};
+pub use client::{Client, ClientBuilder, DispatchOptions};
 pub use errors::Error;
 pub use job::Job;
 pub use worker::{Worker, WorkerBuilder};
