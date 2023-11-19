@@ -1,9 +1,9 @@
-use crate::{DBType, Error, Job};
+use crate::{get_pool, DBType, Error, Job};
 use log::{error, info};
 use sqlx::any::AnyTypeInfo;
 use sqlx::decode::Decode;
 use sqlx::postgres::any::{AnyTypeInfoKind, AnyValueKind};
-use sqlx::{any::AnyPoolOptions, database::HasValueRef, error::BoxDynError, Any, AnyPool};
+use sqlx::{database::HasValueRef, error::BoxDynError, Any, AnyPool};
 use sqlx::{Connection, Type, ValueRef};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::time::timeout;
@@ -300,69 +300,14 @@ impl WorkerBuilder {
     }
 
     pub async fn connect(self, database_url: &str) -> Result<Worker, Error> {
-        sqlx::any::install_default_drivers();
-
-        let pool = AnyPoolOptions::new()
-            .max_connections(self.max_connections)
-            .min_connections(self.min_connections)
-            .connect(database_url)
-            .await
-            .map_err(Error::DatabaseError)?;
-
-        let db_type = if database_url.starts_with("mysql") {
-            DBType::Mysql
-        } else if database_url.starts_with("postgres") {
-            DBType::Postgres
-        } else {
-            return Err(Error::UnsupportedDatabaseUrl);
-        };
-
-        if database_url.starts_with("mysql") {
-            sqlx::query(
-                    r" CREATE TABLE IF NOT EXISTS `jobs` (
-                    `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-                    `queue` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-                    `payload` longtext COLLATE utf8mb4_unicode_ci NOT NULL,
-                    `attempts` int unsigned NOT NULL,
-                    `reserved_at` int unsigned DEFAULT NULL,
-                    `available_at` int unsigned NOT NULL,
-                    `created_at` int unsigned NOT NULL,
-                    PRIMARY KEY (`id`),
-                    KEY `jobs_queue_index` (`queue`)
-                  ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-                )
-                .execute(&pool)
-                .await
-                .map_err(Error::DatabaseError)?;
-        } else if database_url.starts_with("postgres") {
-            let mut transaction = pool.begin().await?;
-
-            sqlx::query("CREATE SEQUENCE IF NOT EXISTS jobs_id_seq")
-                .execute(&mut *transaction)
-                .await
-                .map_err(Error::DatabaseError)?;
-            sqlx::query(
-                r#"
-                    CREATE TABLE IF NOT EXISTS public.jobs (
-                        id int8 NOT NULL DEFAULT nextval('jobs_id_seq'::regclass),
-                        queue varchar NOT NULL,
-                        payload text NOT NULL,
-                        attempts int2 NOT NULL,
-                        reserved_at int4,
-                        available_at int4 NOT NULL,
-                        created_at int4 NOT NULL,
-                        PRIMARY KEY (id)
-                    )
-                    "#,
-            )
-            .execute(&mut *transaction)
-            .await
-            .map_err(Error::DatabaseError)?;
-
-            transaction.commit().await.map_err(Error::DatabaseError)?;
-        } else {
-            return Err(Error::UnsupportedDatabaseUrl);
-        }
+        let (pool, db_type) = get_pool(
+            database_url,
+            crate::PoolOptions {
+                max_connections: self.max_connections,
+                min_connections: self.min_connections,
+            },
+        )
+        .await?;
 
         let worker = Worker {
             db_type,
