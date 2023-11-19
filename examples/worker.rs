@@ -11,6 +11,8 @@ pub struct HelloJob {
 #[typetag::serde]
 impl Job for HelloJob {
     async fn handle(&self) -> Result<(), Error> {
+        tokio::time::sleep(Duration::from_secs(10)).await;
+
         Ok(())
     }
 }

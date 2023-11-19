@@ -62,7 +62,6 @@ loop {
 ```
 
 TODO:
-- [ ] handle timeout
 - [ ] save failed jobs
-- [ ] dispatch using custim delay and attempts
+- [ ] dispatch using custom delay and attempts
 - [ ] emit events, failing, stopping, before and after processing a job

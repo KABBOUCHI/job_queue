@@ -2,7 +2,8 @@ use crate::Error;
 use async_trait::async_trait;
 
 const COMMON_QUEUE: &str = "default";
-pub const MAX_RETRIES: i16 = 1;
+const TRIES: i16 = 1;
+const TIMEOUT: i16 = 300;
 
 #[typetag::serde(tag = "type")]
 #[async_trait]
@@ -16,12 +17,12 @@ pub trait Job: Send + Sync {
 
     /// The number of times the job may be attempted.
     fn tries(&self) -> i16 {
-        MAX_RETRIES
+        TRIES
     }
 
     /// The number of seconds the job can run before timing out.
     fn timeout(&self) -> i16 {
-        0
+        TIMEOUT
     }
 
     /// Calculate the number of seconds to wait before retrying the job.

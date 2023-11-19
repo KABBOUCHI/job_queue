@@ -1,5 +1,3 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
 use crate::{DBType, Error, Job};
 use log::{error, info};
 use sqlx::any::AnyTypeInfo;
@@ -7,6 +5,8 @@ use sqlx::decode::Decode;
 use sqlx::postgres::any::{AnyTypeInfoKind, AnyValueKind};
 use sqlx::{any::AnyPoolOptions, database::HasValueRef, error::BoxDynError, Any, AnyPool};
 use sqlx::{Connection, Type, ValueRef};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::time::timeout;
 
 #[derive(Debug)]
 struct JsonValue(serde_json::Value);
@@ -147,7 +147,9 @@ impl Worker {
 
         info!("Job {}#{} started", job.typetag_name(), task.id);
 
-        let result = job.handle().await;
+        let result = timeout(Duration::from_secs(job.timeout() as u64), job.handle())
+            .await
+            .map_err(|_| Error::JobTimeout);
 
         sqlx::query(&format!(
             "DELETE FROM jobs WHERE id = {}",
@@ -163,11 +165,11 @@ impl Worker {
         .map_err(Error::DatabaseError)?;
 
         match result {
-            Ok(_) => {
+            Ok(Ok(_)) => {
                 info!("Job {}#{} finished", job.typetag_name(), task.id);
             }
-            Err(e) => {
-                let _ = job.failed(e).await;
+            Ok(Err(err)) | Err(err) => {
+                let _ = job.failed(err).await;
 
                 let tries = job.tries();
                 let attempts = task.attempts;
@@ -289,6 +291,11 @@ impl WorkerBuilder {
 
     pub fn worker_count(mut self, worker_count: u32) -> Self {
         self.worker_count = worker_count;
+        self
+    }
+
+    pub fn retry_after(mut self, retry_after: i64) -> Self {
+        self.retry_after = retry_after;
         self
     }
 

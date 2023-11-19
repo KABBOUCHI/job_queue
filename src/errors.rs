@@ -10,6 +10,8 @@ pub enum Error {
     SerdeError(#[from] serde_json::Error),
     #[error("job error: {0}")]
     Message(String),
+    #[error("job timeout")]
+    JobTimeout,
     #[error("unknown data store error")]
     Unknown,
 }
