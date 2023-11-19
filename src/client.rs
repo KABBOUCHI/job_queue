@@ -15,9 +15,14 @@ impl Client {
     }
 
     pub async fn dispatch(&self, job: impl Job) -> Result<(), Error> {
+        let queue = job.queue();
+        
+        self.dispatch_on_queue(job, &queue).await
+    }
+
+    pub async fn dispatch_on_queue(&self, job: impl Job, queue: &str) -> Result<(), Error> {
         let mut conn = self.pool.clone().acquire().await?;
         let payload = serde_json::to_string(&job as &dyn Job).map_err(Error::SerdeError)?;
-        let queue = job.queue();
         let time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| Error::Unknown)?

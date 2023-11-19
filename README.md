@@ -60,3 +60,9 @@ loop {
     tokio::time::sleep(Duration::from_millis(100)).await;
 }
 ```
+
+TODO:
+- [ ] handle timeout
+- [ ] save failed jobs
+- [ ] dispatch using custim delay and attempts
+- [ ] emit events, failing, stopping, before and after processing a job

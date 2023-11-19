@@ -166,8 +166,10 @@ impl Worker {
             Ok(_) => {
                 info!("Job {}#{} finished", job.typetag_name(), task.id);
             }
-            Err(_e) => {
-                let tries = job.max_retries();
+            Err(e) => {
+                let _ = job.failed(e).await;
+
+                let tries = job.tries();
                 let attempts = task.attempts;
 
                 if (attempts + 1) < tries {
