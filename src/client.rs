@@ -9,7 +9,7 @@ pub struct DispatchOptions {
     pub delay: Option<Duration>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Client {
     pool: AnyPool,
     db_type: DBType,
@@ -20,34 +20,35 @@ impl Client {
         ClientBuilder::new()
     }
 
-    pub async fn dispatch(&self, job: impl Job) -> Result<(), Error> {
+    pub async fn dispatch(&self, job: &impl Job) -> Result<(), Error> {
         let queue = job.queue();
 
         self.dispatch_on_queue(job, &queue).await
     }
 
-    pub async fn dispatch_on_queue(&self, job: impl Job, queue: &str) -> Result<(), Error> {
+    pub async fn dispatch_on_queue(&self, job: &impl Job, queue: &str) -> Result<(), Error> {
         let options = DispatchOptions {
             queue: Some(queue.to_string()),
             ..Default::default()
         };
 
-        self.custom_dispatch(job, options).await
+        self.custom_dispatch(job, &options).await
     }
 
     pub async fn custom_dispatch(
         &self,
-        job: impl Job,
-        options: DispatchOptions,
+        job: &impl Job,
+        options: &DispatchOptions,
     ) -> Result<(), Error> {
         let mut conn = self.pool.clone().acquire().await?;
-        let payload = serde_json::to_string(&job as &dyn Job).map_err(Error::SerdeError)?;
+        let payload = serde_json::to_string(job as &dyn Job).map_err(Error::SerdeError)?;
         let time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| Error::Unknown)?
             .as_secs();
 
         let job_id = Uuid::new_v4().to_string();
+        let queue = options.queue.clone().unwrap_or_else(|| job.queue());
 
         sqlx::query(&format!(
             "INSERT INTO jobs (uuid, queue, payload, attempts, available_at, created_at) VALUES {}",
@@ -57,7 +58,7 @@ impl Client {
             }
         ))
         .bind(job_id)
-        .bind(options.queue.unwrap_or_else(|| job.queue()))
+        .bind(queue)
         .bind(payload)
         .bind(0)
         .bind(

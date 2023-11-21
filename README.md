@@ -42,7 +42,7 @@ let queue = Client::builder()
     .await?;
 
 queue
-    .dispatch(HelloJob {
+    .dispatch(&HelloJob {
         message: "Hello, world!".to_string(),
     })
     .await?;
@@ -65,4 +65,5 @@ loop {
 ```
 
 TODO:
+
 - [ ] emit events, failing, stopping, before and after processing a job
