@@ -1,5 +1,8 @@
 # job_queue
 
+> [!IMPORTANT]
+> This lib is unfinished and heavily work in progress.
+
 ## Setup
 
 ```bash
