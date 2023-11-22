@@ -53,6 +53,9 @@ queue
 ### Create a worker
 
 ```rust
+use job_queue::{Error, Job, Worker};
+use std::time::Duration;
+
 let worker = Worker::builder()
         .max_connections(10)
         .worker_count(10)
