@@ -14,7 +14,7 @@ cargo add job_queue
 ### Create a job
 
 ```rust
-use job_queue::{Error, Job};
+use job_queue::{Error, Job, typetag, async_trait};
 use job_queue::serde::{Deserialize, Serialize};
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]

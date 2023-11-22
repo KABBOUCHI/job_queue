@@ -18,3 +18,9 @@ pub(crate) use pool::{PoolOptions, get_pool};
 
 #[doc(hidden)]
 pub extern crate serde;
+
+#[doc(hidden)]
+pub extern crate typetag;
+
+#[doc(hidden)]
+pub extern crate async_trait;
