@@ -15,8 +15,10 @@ cargo add job_queue
 
 ```rust
 use job_queue::{Error, Job};
+use job_queue::serde::{Deserialize, Serialize};
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[serde(crate = "job_queue::serde")]
 pub struct HelloJob {
     pub message: String,
 }
