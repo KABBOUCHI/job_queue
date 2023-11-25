@@ -1,8 +1,9 @@
 mod client;
 mod errors;
 mod job;
-mod worker;
+pub(crate) mod models;
 mod pool;
+mod worker;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DBType {
@@ -13,8 +14,8 @@ pub enum DBType {
 pub use client::{Client, ClientBuilder, DispatchOptions};
 pub use errors::Error;
 pub use job::Job;
+pub(crate) use pool::{get_pool, PoolOptions};
 pub use worker::{Worker, WorkerBuilder};
-pub(crate) use pool::{PoolOptions, get_pool};
 
 #[doc(hidden)]
 pub extern crate serde;

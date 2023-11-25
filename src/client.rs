@@ -1,7 +1,7 @@
-use crate::{get_pool, DBType, Error, Job};
-use sqlx::AnyPool;
-use uuid::Uuid;
+use crate::{get_pool, models::FailedJob, DBType, Error, Job};
+use sqlx::{Any, AnyPool, Connection};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Default)]
 pub struct DispatchOptions {
@@ -74,6 +74,62 @@ impl Client {
         .map_err(Error::DatabaseError)?;
 
         conn.close().await?;
+
+        Ok(())
+    }
+
+    pub async fn retry_job_id(&self, job_id: &str) -> Result<(), Error> {
+        let mut pool = self.pool.acquire().await?;
+        let mut conn = pool.begin().await?;
+
+        let failed_job = sqlx::query_as::<Any, FailedJob>(&format!(
+            "SELECT id, uuid, queue, payload FROM failed_jobs WHERE uuid = {}",
+            match self.db_type {
+                DBType::Mysql => "?",
+                DBType::Postgres => "$1",
+            }
+        ))
+        .bind(job_id)
+        .fetch_one(&mut *conn)
+        .await
+        .map_err(Error::DatabaseError)?;
+
+        let time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| Error::Unknown)?
+            .as_secs() as i64;
+
+        sqlx::query(&format!(
+            "INSERT INTO jobs (uuid, queue, payload, attempts, available_at, created_at) VALUES {}",
+            match self.db_type {
+                DBType::Mysql => "(?, ?, ?, ?, ?, ?)",
+                DBType::Postgres => "($1, $2, $3, $4, $5, $6)",
+            }
+        ))
+        .bind(job_id)
+        .bind(failed_job.queue)
+        .bind(failed_job.payload.0.to_string())
+        .bind(0)
+        .bind(time)
+        .bind(time)
+        .execute(&mut *conn)
+        .await
+        .map_err(Error::DatabaseError)?;
+
+        sqlx::query(&format!(
+            "DELETE FROM failed_jobs WHERE uuid = {}",
+            match self.db_type {
+                DBType::Mysql => "?",
+                DBType::Postgres => "$1",
+            }
+        ))
+        .bind(job_id)
+        .execute(&mut *conn)
+        .await
+        .map_err(Error::DatabaseError)?;
+
+        conn.commit().await?;
+        pool.close().await?;
 
         Ok(())
     }
