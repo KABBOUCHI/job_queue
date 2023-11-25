@@ -78,7 +78,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn retry_job_id(&self, job_id: &str) -> Result<(), Error> {
+    pub async fn retry_failed_job(&self, job_id: &str) -> Result<(), Error> {
         let mut pool = self.pool.acquire().await?;
         let mut conn = pool.begin().await?;
 
@@ -130,6 +130,91 @@ impl Client {
 
         conn.commit().await?;
         pool.close().await?;
+
+        Ok(())
+    }
+
+    pub async fn retry_all_failed_jobs(&self) -> Result<(), Error> {
+        let mut pool = self.pool.acquire().await?;
+        let mut conn = pool.begin().await?;
+
+        let failed_jobs = sqlx::query_as::<Any, (String,)>("SELECT uuid FROM failed_jobs")
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(Error::DatabaseError)?;
+
+        conn.commit().await?;
+        pool.close().await?;
+
+        for failed_job in failed_jobs {
+            self.retry_failed_job(&failed_job.0).await?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn delete_failed_job(&self, job_id: &str) -> Result<(), Error> {
+        let mut conn = self.pool.clone().acquire().await?;
+
+        sqlx::query(&format!(
+            "DELETE FROM failed_jobs WHERE uuid = {}",
+            match self.db_type {
+                DBType::Mysql => "?",
+                DBType::Postgres => "$1",
+            }
+        ))
+        .bind(job_id)
+        .execute(&mut *conn)
+        .await
+        .map_err(Error::DatabaseError)?;
+
+        conn.close().await?;
+
+        Ok(())
+    }
+
+    pub async fn delete_all_failed_jobs(&self) -> Result<(), Error> {
+        let mut conn = self.pool.clone().acquire().await?;
+
+        sqlx::query("DELETE FROM failed_jobs")
+            .execute(&mut *conn)
+            .await
+            .map_err(Error::DatabaseError)?;
+
+        conn.close().await?;
+
+        Ok(())
+    }
+
+    pub async fn delete_job(&self, job_id: &str) -> Result<(), Error> {
+        let mut conn = self.pool.clone().acquire().await?;
+
+        sqlx::query(&format!(
+            "DELETE FROM jobs WHERE uuid = {}",
+            match self.db_type {
+                DBType::Mysql => "?",
+                DBType::Postgres => "$1",
+            }
+        ))
+        .bind(job_id)
+        .execute(&mut *conn)
+        .await
+        .map_err(Error::DatabaseError)?;
+
+        conn.close().await?;
+
+        Ok(())
+    }
+
+    pub async fn delete_all_jobs(&self) -> Result<(), Error> {
+        let mut conn = self.pool.clone().acquire().await?;
+
+        sqlx::query("DELETE FROM jobs")
+            .execute(&mut *conn)
+            .await
+            .map_err(Error::DatabaseError)?;
+
+        conn.close().await?;
 
         Ok(())
     }

@@ -6,9 +6,7 @@ async fn main() -> Result<(), Error> {
         .connect("postgres://kabbouchi:@localhost/job_queue")
         .await?;
 
-    queue
-        .retry_failed_job("5f54f970-87ba-4aea-a0e1-1d0f6a80e17a")
-        .await?;
+    queue.retry_all_failed_jobs().await?;
 
     Ok(())
 }
