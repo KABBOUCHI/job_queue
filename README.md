@@ -62,11 +62,7 @@ let worker = Worker::builder()
         .connect("mysql://root:@localhost/job_queue") // or postgres://root:@localhost/job_queue
         .await?;
 
-worker.start().await?;
-
-loop {
-    tokio::time::sleep(Duration::from_millis(100)).await;
-}
+worker.start().await?; // blocks forever, or until all workers are stopped (crash or ctrl-c)
 ```
 
 TODO:

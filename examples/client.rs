@@ -30,12 +30,12 @@ async fn main() -> Result<(), Error> {
                 },
                 &DispatchOptions {
                     queue: Some("default".to_string()),
-                    delay: Some(Duration::from_secs(5)),
+                    delay: Some(Duration::from_secs(1)),
                 },
             )
             .await?;
 
-        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 
     // Ok(())

@@ -1,5 +1,5 @@
 use crate::{get_pool, models::Task, DBType, Error, Job};
-use log::{error, info};
+use log::{error, info, warn};
 use sqlx::{Any, AnyPool, Connection};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::time::timeout;
@@ -244,19 +244,63 @@ impl Worker {
     pub async fn start(&self) -> Result<(), Error> {
         info!("Processing jobs from the [{}] queue.", self.queue);
 
+        let mut handles = vec![];
+
+        let token = tokio_util::sync::CancellationToken::new();
+
         for _ in 0..self.worker_count {
             let worker = self.clone();
+            let cloned_token = token.clone();
 
-            tokio::spawn(async move {
-                loop {
+            let handle = tokio::spawn(async move {
+                let mut running = true;
+
+                while running {
                     worker.run().await.unwrap();
+
+                    if cloned_token.is_cancelled() {
+                        running = false;
+                    }
 
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             });
+
+            handles.push(handle);
+        }
+
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {
+                info!("Ctrl-C received, shutting down");
+
+                token.cancel();
+            }
+            _ = block_on_handles(&handles) => {}
+        }
+
+        while !handles.iter().all(|handle| handle.is_finished()) {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+
+            info!("Waiting for workers to finish");
+        }
+
+        if token.is_cancelled() {
+            info!("All workers finished after Ctrl-C");
+        } else {
+            warn!("All workers finished, probably a crash");
         }
 
         Ok(())
+    }
+}
+
+async fn block_on_handles(handles: &[tokio::task::JoinHandle<()>]) {
+    loop {
+        if handles.iter().all(|handle| handle.is_finished()) {
+            break;
+        }
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }
 
