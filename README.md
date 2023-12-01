@@ -1,8 +1,5 @@
 # job_queue
 
-> [!WARNING]
-> This lib is unfinished and heavily work in progress.
-
 ## Setup
 
 ```bash
@@ -14,8 +11,7 @@ cargo add job_queue
 ### Create a job
 
 ```rust
-use job_queue::{Error, Job, typetag, async_trait};
-use job_queue::serde::{Deserialize, Serialize};
+use job_queue::{Error, Job, typetag, async_trait, serde};
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 #[serde(crate = "job_queue::serde")]

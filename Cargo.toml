@@ -1,6 +1,11 @@
 [workspace]
-members = [
-    "job_queue",
-    "job_queue_examples",
-]
+members = ["job_queue", "job_queue_examples"]
 resolver = "2"
+
+[workspace.package]
+edition = "2021"
+authors = ["Georges KABBOUCHI <georges.kabbouchi@gmail.com>"]
+keywords = ["queue", "worker", "job", "background", "task"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/KABBOUCHI/job_queue"
