@@ -1,4 +1,4 @@
-extern crate job_queue_examples; // Workaround to avoid "unused import" warning, needed to inclue the jobs in the binary
+extern crate job_queue_examples; // workaround to avoid "unused import" warning, needed to include the jobs in the binary. 
 
 use job_queue::{Error, Worker};
 
