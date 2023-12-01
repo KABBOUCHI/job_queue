@@ -1,6 +1,6 @@
 # job_queue
 
-> [!IMPORTANT]
+> [!WARNING]
 > This lib is unfinished and heavily work in progress.
 
 ## Setup
