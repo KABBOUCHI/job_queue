@@ -6,7 +6,7 @@ authors = ["Georges KABBOUCHI <georges.kabbouchi@gmail.com>"]
 description = "A simple, efficient Rust library for handling asynchronous job processing and task queuing."
 keywords = ["queue", "worker", "job", "background", "task"]
 license = "MIT OR Apache-2.0"
-readme = "README.md"
+readme = "../README.md"
 repository = "https://github.com/KABBOUCHI/job_queue"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
