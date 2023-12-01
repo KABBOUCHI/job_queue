@@ -1,17 +1,6 @@
-use job_queue::{Error, Job, Worker};
+extern crate job_queue_examples; // Workaround to avoid "unused import" warning, needed to inclue the jobs in the binary
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
-pub struct HelloJob {
-    pub message: String,
-}
-
-#[async_trait::async_trait]
-#[typetag::serde]
-impl Job for HelloJob {
-    async fn handle(&self) -> Result<(), Error> {
-        Ok(())
-    }
-}
+use job_queue::{Error, Worker};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {

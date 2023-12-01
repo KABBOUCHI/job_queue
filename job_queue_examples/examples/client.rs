@@ -1,19 +1,6 @@
-use job_queue::{Client, DispatchOptions, Error, Job};
 use std::time::Duration;
-
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
-pub struct HelloJob {
-    pub message: String,
-}
-
-#[async_trait::async_trait]
-#[typetag::serde]
-impl Job for HelloJob {
-    async fn handle(&self) -> Result<(), Error> {
-        println!("{}", self.message);
-        Ok(())
-    }
-}
+use job_queue::{Client, DispatchOptions, Error};
+use job_queue_examples::HelloJob;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {

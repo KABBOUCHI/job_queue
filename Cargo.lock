@@ -559,10 +559,9 @@ checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 
 [[package]]
 name = "job_queue"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "async-trait",
- "env_logger",
  "log",
  "serde",
  "serde_json",
@@ -572,6 +571,15 @@ dependencies = [
  "tokio-util",
  "typetag",
  "uuid",
+]
+
+[[package]]
+name = "job_queue_examples"
+version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "job_queue",
+ "tokio",
 ]
 
 [[package]]
