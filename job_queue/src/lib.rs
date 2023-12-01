@@ -1,4 +1,4 @@
-#![doc = include_str!("../../README.md")]
+#![doc = include_str!("../docs/getting-started.md")]
 
 mod client;
 mod errors;

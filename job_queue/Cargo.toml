@@ -1,6 +1,6 @@
 [package]
 name = "job_queue"
-version = "0.0.17"
+version = "0.0.18"
 edition = { workspace = true }
 authors = { workspace = true }
 keywords = { workspace = true }
