@@ -1,16 +1,24 @@
 use crate::{get_pool, models::Task, DBType, Error, Job};
 use log::{error, info, warn};
 use sqlx::{Any, AnyPool, Connection};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use tokio::time::timeout;
 
-#[derive(Debug, Clone)]
+type OnStoppingFn = Arc<dyn Fn() -> Pin<Box<dyn Future<Output = ()> + Send + Sync>> + Send + Sync>;
+
+#[derive(Clone)]
 pub struct Worker {
     db_type: DBType,
     pool: AnyPool,
     queue: String,
     retry_after: i64,
     worker_count: u32,
+    on_stopping: Option<OnStoppingFn>,
 }
 
 impl Worker {
@@ -290,6 +298,14 @@ impl Worker {
             warn!("All workers finished, probably a crash");
         }
 
+        if let Some(callback) = &self.on_stopping {
+            info!("Running on_stopping callback");
+
+            let fut = callback();
+
+            let _ = fut.await;
+        }
+
         Ok(())
     }
 }
@@ -304,13 +320,14 @@ async fn block_on_handles(handles: &[tokio::task::JoinHandle<()>]) {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default, Clone)]
 pub struct WorkerBuilder {
     pub max_connections: u32,
     pub min_connections: u32,
     pub worker_count: u32,
     pub retry_after: i64,
     pub queue: String,
+    pub on_stopping: Option<OnStoppingFn>,
 }
 
 impl WorkerBuilder {
@@ -321,6 +338,7 @@ impl WorkerBuilder {
             min_connections: 0,
             retry_after: 300,
             worker_count: 1,
+            on_stopping: None,
         }
     }
 
@@ -344,6 +362,23 @@ impl WorkerBuilder {
         self
     }
 
+    pub fn queue(mut self, queue: &str) -> Self {
+        self.queue = queue.to_string();
+        self
+    }
+
+    pub fn on_stopping<F, Fut>(mut self, callback: F) -> Self
+    where
+        F: Fn() -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = ()> + Send + Sync + 'static,
+    {
+        let callback_arc = Arc::new(move || -> Pin<Box<dyn Future<Output = ()> + Send + Sync>> {
+            Box::pin(callback())
+        });
+        self.on_stopping = Some(callback_arc);
+        self
+    }
+
     pub async fn connect(self, database_url: &str) -> Result<Worker, Error> {
         let (pool, db_type) = get_pool(
             database_url,
@@ -360,6 +395,7 @@ impl WorkerBuilder {
             queue: self.queue,
             retry_after: self.retry_after,
             worker_count: self.worker_count,
+            on_stopping: self.on_stopping,
         };
 
         Ok(worker)
