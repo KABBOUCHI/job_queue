@@ -1,5 +1,6 @@
 use crate::Error;
 use async_trait::async_trait;
+use std::panic::RefUnwindSafe;
 
 const COMMON_QUEUE: &str = "default";
 const TRIES: i16 = 1;
@@ -7,7 +8,7 @@ const TIMEOUT: i16 = 300;
 
 #[typetag::serde(tag = "type")]
 #[async_trait]
-pub trait Job: Send + Sync {
+pub trait Job: Send + Sync + RefUnwindSafe {
     async fn handle(&self) -> Result<(), Error>;
 
     /// The name of the queue the job should be dispatched to.

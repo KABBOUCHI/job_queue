@@ -116,9 +116,20 @@ impl Worker {
 
         info!("Job {}#{} started", job.typetag_name(), task.id);
 
-        let result = timeout(Duration::from_secs(job.timeout() as u64), job.handle())
-            .await
-            .map_err(|_| Error::JobTimeout);
+        let result = std::panic::catch_unwind(|| {
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    timeout(Duration::from_secs(job.timeout() as u64), job.handle())
+                        .await
+                        .map_err(|_| Error::JobTimeout)
+                })
+            })
+        });
+
+        let result = match result {
+            Ok(result) => result,
+            Err(_) => Err(Error::JobPanic),
+        };
 
         sqlx::query(&format!(
             "DELETE FROM jobs WHERE id = {}",

@@ -12,6 +12,8 @@ pub enum Error {
     Message(String),
     #[error("job timeout")]
     JobTimeout,
+    #[error("job panic")]
+    JobPanic,
     #[error("unknown data store error")]
     Unknown,
 }
